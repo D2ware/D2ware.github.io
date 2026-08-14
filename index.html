@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>OpenFront Lobbies</title>
-    <link rel="stylesheet" href="styles.css?v=4e50f2db40eb" />
+    <link rel="stylesheet" href="styles.css?v=07562f8ed690" />
   </head>
 
   <body>
@@ -1762,16 +1762,11 @@
         const thumbUrl = getMapThumbnailUrl(map);
         const maxPlayers = g.maxPlayers;
         const isNewMatchFlash = state.flashIds.has(String(gameID));
-        const customLobby = isCustomLobby(g);
         const modifierDetails = gameModifierDetails(g);
-        const badges = (customLobby ? [] : modifierDetails.map((detail) => detail.label).sort((a, b) => badgeTextWidth(b) - badgeTextWidth(a)))
-          .map((label) => `<span class="cardBadge">${escapeHtml(label)}</span>`)
+        const badges = modifierDetails.slice()
+          .sort((a, b) => badgeTextWidth(b.label) - badgeTextWidth(a.label))
+          .map((detail) => `<span class="cardBadge ${escapeHtml(detail.tone)}"${detail.title ? ` title="${escapeHtml(detail.title)}"` : ""}>${escapeHtml(detail.label)}</span>`)
           .join("");
-        const settings = customLobby && modifierDetails.length > 0
-          ? `<div class="gameCardSettings">${modifierDetails.map((detail) => `
-              <span class="gameCardSetting ${escapeHtml(detail.tone)}"${detail.title ? ` title="${escapeHtml(detail.title)}"` : ""}>${escapeHtml(detail.label)}</span>
-            `).join("")}</div>`
-          : "";
 
         return `
           <article
@@ -1801,7 +1796,6 @@
                 </div>
                 <div class="cardCode mono">${escapeHtml(gameID)}</div>
               </div>
-              ${settings}
             </div>
           </article>
         `;
