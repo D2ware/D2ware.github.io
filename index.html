@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>OpenFront Lobbies</title>
-    <link rel="stylesheet" href="styles.css?v=07562f8ed690" />
+    <link rel="stylesheet" href="styles.css?v=65530a40f2e1" />
   </head>
 
   <body>
@@ -1315,7 +1315,8 @@
           }
           if (node) order.push(node);
         }
-        for (let i = games.length; i < COLUMN_MIN_SLOTS; i++) order.push(nodeFromHtml(spawnPlaceholderHtml()));
+        const minimumSlots = col.key === "custom" ? 0 : COLUMN_MIN_SLOTS;
+        for (let i = games.length; i < minimumSlots; i++) order.push(nodeFromHtml(spawnPlaceholderHtml()));
 
         // Drop cards whose game is gone, plus any stale placeholders.
         existing.forEach((node, id) => { if (!keep.has(id)) node.remove(); });
