@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>OpenFront Lobbies</title>
-    <link rel="stylesheet" href="styles.css?v=1f83496005c0" />
+    <link rel="stylesheet" href="styles.css?v=23a3e87b67b7" />
   </head>
 
   <body>
@@ -210,6 +210,7 @@
       </div>
     </div>
 
+    <script src="lobby-wire.js?v=23a3e87b67b7"></script>
     <script>
       document.body.classList.add("card-view");
 
@@ -592,6 +593,7 @@
         lastFullMessageAt: 0,
         reconnectAttempts: 0,
         unknownCountFrames: 0,
+        decodeFailures: 0,
         manualDisconnect: false,
 
         view:
@@ -2342,11 +2344,15 @@
         setStatus("Connecting…", "is-connecting");
       
         const ws = new WebSocket(url);
+        // Frames are zbin payloads; without this they arrive as Blobs, which
+        // cannot be read synchronously in onmessage.
+        ws.binaryType = "arraybuffer";
         state.ws = ws;
         state.manualDisconnect = false;
         state.lastMessageAt = 0;
         state.lastDataAt = 0;
         state.unknownCountFrames = 0;
+        state.decodeFailures = 0;
 
         state.connectTimeout = setTimeout(() => {
           if (state.ws !== ws || ws.readyState === WebSocket.OPEN) return;
@@ -2409,12 +2415,25 @@
 
           let message;
           try {
-            message = JSON.parse(event.data);
+            message = OpenFrontLobbyWire.decodeLobbyMessage(event.data);
           } catch (error) {
-            console.warn("Ignored invalid WebSocket message:", error);
+            // A decode failure is almost never a corrupt frame — zbin carries no
+            // version byte, so a schema change upstream shifts the whole layout
+            // and every frame fails identically. Say so instead of reconnecting
+            // forever behind a "Connecting…" spinner.
+            state.decodeFailures += 1;
+            console.warn("Failed to decode lobby frame:", error);
+
+            if (state.decodeFailures >= 3) {
+              state.manualDisconnect = true;
+              closeCurrentSocket();
+              state.ws = null;
+              setStatus("Lobby data format changed — update required", "is-offline");
+            }
             return;
           }
 
+          state.decodeFailures = 0;
           state.lastMessageAt = Date.now();
 
           let changed = false;
