@@ -308,7 +308,7 @@ function show(i) {
   const leg = document.getElementById("legend");
   const who = (d, s) => d.names.filter((n) => d.side[n] === s).map(esc).join(", ");
   leg.innerHTML = i === 0
-    ? `<span><span class="sw" style="background:${BLUE}"></span><b>Blue</b> = D_D's team</span><span><span class="sw" style="background:${RED}"></span><b>Red</b> = opponents</span>`
+    ? `<span><span class="sw" style="background:${BLUE}"></span><b>Blue</b> = team EU</span><span><span class="sw" style="background:${RED}"></span><b>Red</b> = opponents</span>`
     : SIDES.map(([s, c]) => `<span><span class="sw" style="background:${c}"></span><b>${s === "blue" ? "Blue" : "Red"}</b>: ${who(D[i - 1], s)}</span>`).join("");
 }
 ["All games (average)", ...D.map((d) => d.g.map)].forEach((label, i) => {
