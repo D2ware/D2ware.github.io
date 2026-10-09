@@ -44,12 +44,27 @@ th:first-child, td:first-child { text-align: left; }
 tr:last-child td { border-bottom: 0; }
 td .sw { height: 10px; width: 10px; border-radius: 50%; }
 .note { color: var(--ink2); font-size: 12px; margin-top: 8px; }
+.cal { display: flex; align-items: center; gap: 12px; margin: 0 0 16px; padding: 10px 12px; background: var(--panel); border: 1px solid var(--grid); border-radius: 8px; }
+.cal[hidden] { display: none; }
+.calTitle { flex: 0 0 auto; font-size: 13px; font-weight: 600; }
+.calList { flex: 1 1 auto; min-width: 0; display: flex; gap: 8px; overflow-x: auto; }
+.calEvent { flex: 0 0 auto; max-width: 280px; padding: 6px 10px; border: 1px solid var(--grid); border-radius: 6px; }
+.calEvent.live { border-color: var(--blue); }
+.calWhen { font-size: 12px; color: var(--ink2); font-variant-numeric: tabular-nums; }
+.calWhen b { color: var(--blue); font-weight: 600; margin-right: 6px; }
+.calName { font-weight: 600; overflow-wrap: anywhere; }
+.calNote { font-size: 12px; color: var(--ink2); overflow-wrap: anywhere; }
+@media (max-width: 560px) { .cal { flex-direction: column; align-items: stretch; gap: 8px; } }
 </style>
 </head>
 <body>
 <main>
 <h1>OpenFront – team comparison</h1>
 <p class="sub" id="sub"></p>
+<section class="cal" id="cal" aria-label="Team calendar" hidden>
+<div class="calTitle">Team calendar</div>
+<div class="calList" id="calList"></div>
+</section>
 <div class="tabs" id="tabs"></div>
 <div class="legend" id="legend"></div>
 <div id="view"></div>
@@ -318,6 +333,55 @@ function show(i) {
 });
 document.getElementById("sub").textContent = `${D.length} games, 4v4 + 400 bots. Time axis = game time from start (spawn phase ends at 0:20). Hover a chart to see values.`;
 show(0);
+</script>
+<script>
+// ---- team calendar ---------------------------------------------------------
+// Events are managed from Discord and served by the relay. The strip stays
+// hidden when nothing is upcoming or the relay is unreachable.
+(() => {
+  const CALENDAR_URL = ["localhost", "127.0.0.1"].includes(location.hostname)
+    ? "http://localhost:3040/calendar/api/events"
+    : "https://moss.nonekode.fi/calendar/api/events";
+  const cal = document.getElementById("cal"), list = document.getElementById("calList");
+  const day = new Intl.DateTimeFormat(undefined, { weekday: "short", day: "numeric", month: "short" });
+  const time = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" });
+  const el = (tag, cls, text) => {
+    const e = document.createElement(tag);
+    e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  };
+  let events = [];
+  function render() {
+    const now = Date.now();
+    list.replaceChildren(...events.map((ev) => {
+      const t = new Date(ev.startsAt), live = t.getTime() <= now;
+      const item = el("div", live ? "calEvent live" : "calEvent");
+      const when = el("div", "calWhen");
+      when.append(el("b", "", live ? "Live now" : day.format(t)), time.format(t));
+      item.append(when, el("div", "calName", ev.title));
+      if (ev.note) item.append(el("div", "calNote", ev.note));
+      return item;
+    }));
+    cal.hidden = events.length === 0;
+  }
+  async function refresh() {
+    try {
+      const r = await fetch(CALENDAR_URL, { cache: "no-store" });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const body = await r.json();
+      events = Array.isArray(body.events)
+        ? body.events.filter((ev) => ev && typeof ev.title === "string" && !Number.isNaN(Date.parse(ev.startsAt)))
+        : [];
+    } catch (e) {
+      console.warn("Team calendar unavailable:", e);
+    }
+    render();
+  }
+  refresh();
+  setInterval(() => { if (!document.hidden) refresh(); }, 60000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
+})();
 </script>
 </body>
 </html>
