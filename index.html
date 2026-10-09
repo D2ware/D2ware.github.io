@@ -44,27 +44,38 @@ th:first-child, td:first-child { text-align: left; }
 tr:last-child td { border-bottom: 0; }
 td .sw { height: 10px; width: 10px; border-radius: 50%; }
 .note { color: var(--ink2); font-size: 12px; margin-top: 8px; }
-.cal { display: flex; align-items: center; gap: 12px; margin: 0 0 16px; padding: 10px 12px; background: var(--panel); border: 1px solid var(--grid); border-radius: 8px; }
+.cal { margin: 0 0 26px; }
 .cal[hidden] { display: none; }
-.calTitle { flex: 0 0 auto; font-size: 13px; font-weight: 600; }
-.calList { flex: 1 1 auto; min-width: 0; display: flex; gap: 8px; overflow-x: auto; }
-.calEvent { flex: 0 0 auto; max-width: 280px; padding: 6px 10px; border: 1px solid var(--grid); border-radius: 6px; }
-.calEvent.live { border-color: var(--blue); }
-.calWhen { font-size: 12px; color: var(--ink2); font-variant-numeric: tabular-nums; }
-.calWhen b { color: var(--blue); font-weight: 600; margin-right: 6px; }
-.calName { font-weight: 600; overflow-wrap: anywhere; }
-.calNote { font-size: 12px; color: var(--ink2); overflow-wrap: anywhere; }
-@media (max-width: 560px) { .cal { flex-direction: column; align-items: stretch; gap: 8px; } }
+.calHead { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; margin: 0 0 10px; }
+.calHead h2 { margin: 0; }
+.calHead span { color: var(--ink2); font-size: 12px; }
+.calList { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.calEvent { display: flex; align-items: flex-start; gap: 12px; min-width: 0; padding: 12px; background: var(--panel); border: 1px solid var(--grid); border-radius: 8px; }
+.calEvent.next { border-color: var(--blue); box-shadow: inset 3px 0 0 var(--blue); }
+.calDate { flex: 0 0 48px; padding: 6px 0 7px; text-align: center; line-height: 1.15; background: var(--blue-soft); border-radius: 6px; }
+.calDate b { display: block; font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.calDate span { display: block; font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--blue); }
+.calBody { flex: 1 1 auto; min-width: 0; }
+.calName { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.calWhen { margin-top: 2px; font-size: 12px; color: var(--ink2); font-variant-numeric: tabular-nums; }
+.calWhen b { color: var(--ink); font-weight: 600; }
+.calLive { color: var(--blue); font-weight: 600; }
+.calLive::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: var(--blue); animation: calPulse 1.6s ease-in-out infinite; }
+@keyframes calPulse { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .calLive::before { animation: none; } }
+.calNote { margin-top: 6px; font-size: 12px; color: var(--ink2); overflow-wrap: anywhere; }
+.calMore { margin-top: 8px; padding: 0; font: inherit; font-size: 12px; color: var(--ink2); background: none; border: 0; text-decoration: underline; cursor: pointer; }
 </style>
 </head>
 <body>
 <main>
+<section class="cal" id="cal" aria-label="Team calendar" hidden>
+<div class="calHead"><h2>Team calendar</h2><span id="calZone"></span></div>
+<div class="calList" id="calList"></div>
+<button class="calMore" id="calMore" type="button" hidden></button>
+</section>
 <h1>OpenFront – team comparison</h1>
 <p class="sub" id="sub"></p>
-<section class="cal" id="cal" aria-label="Team calendar" hidden>
-<div class="calTitle">Team calendar</div>
-<div class="calList" id="calList"></div>
-</section>
 <div class="tabs" id="tabs"></div>
 <div class="legend" id="legend"></div>
 <div id="view"></div>
@@ -342,29 +353,57 @@ show(0);
   const CALENDAR_URL = ["localhost", "127.0.0.1"].includes(location.hostname)
     ? "http://localhost:3040/calendar/api/events"
     : "https://moss.nonekode.fi/calendar/api/events";
-  const cal = document.getElementById("cal"), list = document.getElementById("calList");
-  const day = new Intl.DateTimeFormat(undefined, { weekday: "short", day: "numeric", month: "short" });
-  const time = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" });
+  const cal = document.getElementById("cal"), list = document.getElementById("calList"), more = document.getElementById("calMore");
+  // One row on a wide screen; fewer where the cards stack so the report stays in reach.
+  const limit = () => (window.innerWidth < 700 ? 3 : 6);
+  // English names to match the page, with the viewer's own 12/24-hour clock.
+  const hour12 = new Intl.DateTimeFormat(undefined, { hour: "numeric" }).resolvedOptions().hour12;
+  const fmt = (options) => new Intl.DateTimeFormat("en", options);
+  const weekday = fmt({ weekday: "short" }), dayNum = fmt({ day: "numeric" }), month = fmt({ month: "short" });
+  const time = fmt({ hour: "2-digit", minute: "2-digit", hour12 });
+  const rel = new Intl.RelativeTimeFormat("en", { numeric: "always" });
+  const until = (ms) => {
+    const min = Math.max(1, Math.round(ms / 60000));
+    if (min < 60) return rel.format(min, "minute");
+    if (min < 36 * 60) return rel.format(Math.round(min / 60), "hour");
+    return rel.format(Math.round(min / 1440), "day");
+  };
+  document.getElementById("calZone").textContent =
+    `Shown in your time zone (${Intl.DateTimeFormat().resolvedOptions().timeZone.replace(/_/g, " ")})`;
   const el = (tag, cls, text) => {
     const e = document.createElement(tag);
     e.className = cls;
     if (text !== undefined) e.textContent = text;
     return e;
   };
-  let events = [];
+  let events = [], expanded = false;
   function render() {
     const now = Date.now();
-    list.replaceChildren(...events.map((ev) => {
-      const t = new Date(ev.startsAt), live = t.getTime() <= now;
-      const item = el("div", live ? "calEvent live" : "calEvent");
+    const isLive = (ev) => Date.parse(ev.startsAt) <= now;
+    // Highlight what is running; if nothing is, the next event up.
+    const anyLive = events.some(isLive);
+    list.replaceChildren(...(expanded ? events : events.slice(0, limit())).map((ev, i) => {
+      const t = new Date(ev.startsAt), live = isLive(ev);
+      const item = el("div", live || (!anyLive && i === 0) ? "calEvent next" : "calEvent");
+      const date = el("div", "calDate");
+      date.append(el("span", "", weekday.format(t)), el("b", "", dayNum.format(t)), el("span", "", month.format(t)));
       const when = el("div", "calWhen");
-      when.append(el("b", "", live ? "Live now" : day.format(t)), time.format(t));
-      item.append(when, el("div", "calName", ev.title));
-      if (ev.note) item.append(el("div", "calNote", ev.note));
+      when.append(el("b", "", time.format(t)), " · ", live ? el("span", "calLive", "Live now") : until(t.getTime() - now));
+      const body = el("div", "calBody");
+      body.append(el("div", "calName", ev.title), when);
+      if (ev.note) body.append(el("div", "calNote", ev.note));
+      item.append(date, body);
       return item;
     }));
+    more.hidden = events.length <= limit();
+    more.textContent = expanded ? "Show fewer" : `Show all ${events.length} events`;
     cal.hidden = events.length === 0;
   }
+  more.addEventListener("click", () => {
+    expanded = !expanded;
+    render();
+  });
+  setInterval(() => { if (!document.hidden) render(); }, 30000);
   async function refresh() {
     try {
       const r = await fetch(CALENDAR_URL, { cache: "no-store" });
